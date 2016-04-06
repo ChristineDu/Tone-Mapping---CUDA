@@ -50,6 +50,7 @@ int main(int argc, char **argv) {
 	  input_file = std::string(argv[1]);
 	  output_file = "HW3_output.png";
 	  reference_file = "HW3_reference.png";
+std::cerr << "1" << std::endl;
 	  break;
 	case 3:
 	  input_file  = std::string(argv[1]);
@@ -73,7 +74,9 @@ int main(int argc, char **argv) {
       std::cerr << "Usage: ./HW3 input_file [output_filename] [reference_filename] [perPixelError] [globalError]" << std::endl;
       exit(1);
   }
+
   //load the image and give us our input and output pointers
+
   preProcess(&d_luminance, &d_cdf,
              &numRows, &numCols, &numBins, input_file);
 
@@ -82,9 +85,11 @@ int main(int argc, char **argv) {
   min_logLum = 0.f;
   max_logLum = 1.f;
   timer.Start();
+
   //call the students' code
   your_histogram_and_prefixsum(d_luminance, d_cdf, min_logLum, max_logLum,
                                numRows, numCols, numBins);
+
   timer.Stop();
   cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
   int err = printf("Your code ran in: %f msecs.\n", timer.Elapsed());

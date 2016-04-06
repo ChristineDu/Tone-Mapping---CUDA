@@ -17,7 +17,7 @@ OPENCV_INCLUDEPATH=/usr/include
 
 OPENCV_LIBS=-lopencv_core -lopencv_imgproc -lopencv_highgui
 
-CUDA_INCLUDEPATH=/usr/local/cuda-5.0/include
+CUDA_INCLUDEPATH=/usr/local/cuda-7.0/include
 
 ######################################################
 # On Macs the default install locations are below    #
@@ -34,7 +34,7 @@ student: main.o student_func.o HW3.o loadSaveImage.o compare.o reference_calc.o 
 	$(NVCC) -o HW3 main.o student_func.o HW3.o loadSaveImage.o compare.o reference_calc.o -L $(OPENCV_LIBPATH) $(OPENCV_LIBS) $(NVCC_OPTS)
 
 main.o: main.cpp timer.h utils.h reference_calc.h compare.h
-	g++ -c main.cpp $(GCC_OPTS) -I $(CUDA_INCLUDEPATH)
+	g++ -c main.cpp $(GCC_OPTS) -I$(CUDA_INCLUDEPATH)
 
 HW3.o: HW3.cu loadSaveImage.h utils.h
 	$(NVCC) -c HW3.cu -I $(OPENCV_INCLUDEPATH) $(NVCC_OPTS)

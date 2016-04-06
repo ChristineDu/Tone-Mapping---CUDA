@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "stdio.h"
 
 #define tbp 512
 
@@ -123,7 +124,7 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
     
     printf("got min of %f\n", min_logLum);
     printf("got max of %f\n", max_logLum);
-    printf("numBins %d\n", numBins);
+    printf("numBins %lu\n", numBins);
 
 
 }

@@ -138,12 +138,14 @@ void preProcess(float** d_luminance, unsigned int** d_cdf,
                 unsigned int *numberOfBins,
                 const std::string &filename) {
   //make sure the context initializes ok
+printf("123333");
   checkCudaErrors(cudaFree(0));
-
+printf("123333");
   float *imgPtr; //we will become responsible for this pointer
   loadImageHDR(filename, &imgPtr, &numRows__, &numCols__);
   *numRows = numRows__;
   *numCols = numCols__;
+printf("111123333");
 
   //first thing to do is split incoming BGR float data into separate channels
   size_t numPixels = numRows__ * numCols__;
