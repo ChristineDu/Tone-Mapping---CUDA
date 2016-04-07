@@ -18,6 +18,27 @@ __global__ void generate_histogram(unsigned int* bins, const float* dIn, const i
   atomicAdd(&bins[bin], 1);
 }
 
+//Scan Kernel
+__global__ 
+void scan_kernel(unsigned int* d_bins, int size) {
+    int mid = threadIdx.x + blockDim.x * blockIdx.x;
+    if(mid >= size)
+        return;
+    
+    for(int s = 1; s <= size; s *= 2) {
+          int spot = mid - s; 
+         
+          unsigned int val = 0;
+          if(spot >= 0)
+              val = d_bins[spot];
+          __syncthreads();
+          if(spot >= 0)
+              d_bins[mid] += val;
+          __syncthreads();
+
+    }
+}
+
 // kernel for calculating minimum value
 __global__ void cmin(float *d_in, float *min, int len)
 {
@@ -114,6 +135,12 @@ float get_min_max(const float* const d_in, const size_t size, int flag){
   cudaFree(dev_in);
   return result;
 }
+
+int get_max_size(int n, int d) {
+    return (int)ceil( (float)n/(float)d ) + 1;
+}
+
+
 void your_histogram_and_prefixsum(const float* const d_logLuminance,
                                   unsigned int* const d_cdf,
                                   float &min_logLum,
@@ -160,5 +187,19 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
         printf("hist out %d\n", h_out[i]);
 
 //Histogram stored in bins
+
+   dim3 scan_block_dim(get_max_size(numBins, thread_dim.x));
+
+   scan_kernel<<<scan_block_dim, thread_dim>>>(bins, numBins);
+   cudaDeviceSynchronize(); 
+    
+   cudaMemcpy(&h_out, bins, sizeof(unsigned int)*100, cudaMemcpyDeviceToHost);
+   for(int i = 0; i < 100; i++)
+       printf("cdf out %d\n", h_out[i]);
+    
+   cudaMemcpy(d_cdf, bins, histogramSize, cudaMemcpyDeviceToDevice);
+
+    
+   checkCudaErrors(cudaFree(bins));
 
 }
