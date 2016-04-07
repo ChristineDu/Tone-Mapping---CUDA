@@ -1,7 +1,7 @@
 #include "utils.h"
 #include "stdio.h"
 
-#define tbp 512
+#define tbp 1024
 
 //kernel for generating histogram
 __global__ void generate_histogram(unsigned int* bins, const float* dIn, const int binNumber, const float lumMin, const float lumMax, const int size) {
@@ -50,6 +50,7 @@ __global__ void cmin(float *d_in, float *min, int len)
   smin[tid] = d_in[i]<d_in[i+len] ? d_in[i] : d_in[i+len];
 
   __syncthreads();
+  if(blockDim.x > 512 && tid<512) {if(smin[tid] > smin[tid+512]) smin[tid] = smin[tid+512];}  __syncthreads();
   if(blockDim.x > 256 && tid<256) {if(smin[tid] > smin[tid+256]) smin[tid] = smin[tid+256];}  __syncthreads();
   if(blockDim.x > 128 && tid<128) {if(smin[tid] > smin[tid+128]) smin[tid] = smin[tid+128];}  __syncthreads();
   if(blockDim.x > 64 && tid<64) {if(smin[tid] > smin[tid+64]) smin[tid] = smin[tid+64];}  __syncthreads();
@@ -78,7 +79,7 @@ __global__ void cmax(float *d_in, float *max, int len)
   smax[tid] = d_in[i]>d_in[i+len] ? d_in[i] : d_in[i+len];
 
   __syncthreads();
-
+  if(blockDim.x > 512 && tid<512) {if(smax[tid] < smax[tid+512]) smax[tid] = smax[tid+512];}  __syncthreads();
   if(blockDim.x > 256 && tid<256) {if(smax[tid] < smax[tid+256]) smax[tid] = smax[tid+256];}  __syncthreads();
   if(blockDim.x > 128 && tid<128) {if(smax[tid] < smax[tid+128]) smax[tid] = smax[tid+128];}  __syncthreads();
   if(blockDim.x > 64 && tid<64) {if(smax[tid] < smax[tid+64]) smax[tid] = smax[tid+64];}  __syncthreads();
@@ -178,6 +179,7 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
     int nblocks = ((size + tbp) - 1) / tbp;
 
     dim3 thread_dim(1024);
+    dim3 hist_block_dim(get_max_size(size, thread_dim.x));
     generate_histogram<<<nblocks, tbp>>>(bins, d_logLuminance, numBins, min_logLum, max_logLum, size);
     cudaDeviceSynchronize();
 
