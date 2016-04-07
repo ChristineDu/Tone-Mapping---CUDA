@@ -50,7 +50,6 @@ int main(int argc, char **argv) {
 	  input_file = std::string(argv[1]);
 	  output_file = "HW3_output.png";
 	  reference_file = "HW3_reference.png";
-std::cerr << "1" << std::endl;
 	  break;
 	case 3:
 	  input_file  = std::string(argv[1]);

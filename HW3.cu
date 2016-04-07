@@ -145,7 +145,6 @@ printf("123333");
   loadImageHDR(filename, &imgPtr, &numRows__, &numCols__);
   *numRows = numRows__;
   *numCols = numCols__;
-printf("111123333");
 
   //first thing to do is split incoming BGR float data into separate channels
   size_t numPixels = numRows__ * numCols__;
