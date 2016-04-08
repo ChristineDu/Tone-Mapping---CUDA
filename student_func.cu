@@ -38,6 +38,84 @@ void scan_kernel(unsigned int* d_bins, int size) {
 
     }
 }
+__global__ void  blelloch_scan_single_block(unsigned int* d_in_array, const size_t numBins)
+/*
+  Computes the blelloch exclusive scan for a cumulative distribution function of a
+  histogram, as long as the number of Bins of the histogram is not more than twice
+  the number of threads per block.
+
+  Also, if numBins < 2*num_threads, then it will full the end of the
+  input array with zeros.
+
+  \Params:
+    * d_in_array - input array of histogram values in each bin. Gets converted
+      to cdf by the end of the function.
+    * numBins - number of bins in the histogram (Must be < 2*MAX_THREADS_PER_BLOCK)
+*/
+{
+
+  int thid = threadIdx.x;
+  int global_id = blockIdx.x*blockDim.x + thid;
+  // In this function, above two expressions should be equal, so let's
+  // not use global_id!!
+
+  extern __shared__ float temp_array[];
+
+  // Make sure that we do not read from undefined part of array if it
+  // is smaller than the number of threads that we gave defined. If
+  // that is the case, the final values of the input array are
+  // extended to zero.
+  if (thid < numBins) temp_array[thid] = d_in_array[thid];
+  else temp_array[thid] = 0;
+  if( (thid + numBins/2) < numBins)
+    temp_array[thid + numBins/2] = d_in_array[thid + numBins/2];
+  else temp_array[thid + numBins/2] = 0;
+
+  __syncthreads();
+
+  // Part 1: Up Sweep, reduction
+  // Iterate log_2(numBins) times, and each element adds value 'stride'
+  // elements away to its own value.
+  int stride = 1;
+  for (int d = numBins>>1; d > 0; d>>=1) {
+
+    if (thid < d) {
+      int neighbor = stride*(2*thid+1) - 1;
+      int index = stride*(2*thid+2) - 1;
+
+      temp_array[index] += temp_array[neighbor];
+    }
+    stride *=2;
+    __syncthreads();
+  }
+  // Now set last element to identity:
+  if (thid == 0)  temp_array[numBins-1] = 0;
+
+  // Part 2: Down sweep
+  // Iterate log(n) times. Each thread adds value stride elements away to
+  // its own value, and sets the value stride elements away to its own
+  // previous value.
+  for (int d=1; d<numBins; d *= 2) {
+    stride >>= 1;
+    __syncthreads();
+
+    if(thid < d) {
+      int neighbor = stride*(2*thid+1) - 1;
+      int index = stride*(2*thid+2) - 1;
+
+      float t = temp_array[neighbor];
+      temp_array[neighbor] = temp_array[index];
+      temp_array[index] += t;
+    }
+  }
+
+  __syncthreads();
+
+  if (thid < numBins) d_in_array[thid] = temp_array[thid];
+  if ((thid + numBins/2) < numBins)
+    d_in_array[thid + numBins/2] = temp_array[thid + numBins/2];
+
+}
 
 // kernel for calculating minimum value
 __global__ void cmin(float *d_in, float *min, int len)
@@ -193,6 +271,9 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
    dim3 scan_block_dim(get_max_size(numBins, thread_dim.x));
 
    scan_kernel<<<scan_block_dim, thread_dim>>>(bins, numBins);
+   //nblocks = (numBins/2 - 1) / 512 + 1;
+   //blelloch_scan_single_block<<<scan_block_dim,512,numBins*sizeof(int)>>>(bins, numBins);
+
    cudaDeviceSynchronize(); 
     
    cudaMemcpy(&h_out, bins, sizeof(unsigned int)*100, cudaMemcpyDeviceToHost);
