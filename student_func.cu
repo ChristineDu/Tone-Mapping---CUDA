@@ -35,8 +35,8 @@ void scan_kernel(unsigned int* d_bins, int size) {
           if(spot >= 0)
               d_bins[mid] += val;
           __syncthreads();
-
     }
+
 }
 __global__ void  blelloch_scan_single_block(unsigned int* d_in_array, const size_t numBins)
 /*
@@ -56,6 +56,7 @@ __global__ void  blelloch_scan_single_block(unsigned int* d_in_array, const size
 
   int thid = threadIdx.x;
   int global_id = blockIdx.x*blockDim.x + thid;
+  int last = d_in_array[1023];
   // In this function, above two expressions should be equal, so let's
   // not use global_id!!
 
@@ -65,6 +66,7 @@ __global__ void  blelloch_scan_single_block(unsigned int* d_in_array, const size
   // is smaller than the number of threads that we gave defined. If
   // that is the case, the final values of the input array are
   // extended to zero.
+
   if (thid < numBins) temp_array[thid] = d_in_array[thid];
   else temp_array[thid] = 0;
   if( (thid + numBins/2) < numBins)
@@ -114,6 +116,14 @@ __global__ void  blelloch_scan_single_block(unsigned int* d_in_array, const size
   if (thid < numBins) d_in_array[thid] = temp_array[thid];
   if ((thid + numBins/2) < numBins)
     d_in_array[thid + numBins/2] = temp_array[thid + numBins/2];
+
+  __syncthreads();
+ if(global_id == 0){
+	for (int i = 0; i != numBins - 1; i++) {
+  	 	*(d_in_array + i) = *(d_in_array + i + 1);
+	}
+	d_in_array[numBins - 1] += last;
+ }
 
 }
 
@@ -270,9 +280,9 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
 
    dim3 scan_block_dim(get_max_size(numBins, thread_dim.x));
 
-   scan_kernel<<<scan_block_dim, thread_dim>>>(bins, numBins);
-   //nblocks = (numBins/2 - 1) / 512 + 1;
-   //blelloch_scan_single_block<<<scan_block_dim,512,numBins*sizeof(int)>>>(bins, numBins);
+   //scan_kernel<<<scan_block_dim, thread_dim>>>(bins, numBins);
+   nblocks = (numBins/2 - 1) / 512 + 1;
+   blelloch_scan_single_block<<<scan_block_dim,512,numBins*sizeof(int)>>>(bins, numBins);
 
    cudaDeviceSynchronize(); 
     
