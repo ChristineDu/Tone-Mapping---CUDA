@@ -2,6 +2,14 @@
 #include "stdio.h"
 
 #define tbp 1024
+#define NUM_BANKS 16
+#define LOG_NUM_BANKS 4
+
+// #ifdef ZERO_BANK_CONFLICTS
+// #define CONFLICT_FREE_OFFSET(n) ((n)>>NUM_BANKS + (n)>>(2*LOG_NUM_BANKS))
+// #else
+#define CONFLICT_FREE_OFFSET(n) (n)>> LOG_NUM_BANKS
+// #endif
 
 //kernel for generating histogram
 __global__ void generate_histogram(unsigned int* bins, const float* dIn, const int binNumber, const float lumMin, const float lumMax, const int size) {
@@ -21,22 +29,144 @@ __global__ void generate_histogram(unsigned int* bins, const float* dIn, const i
 //Scan Kernel
 __global__ 
 void scan_kernel(unsigned int* d_bins, int size) {
-    int mid = threadIdx.x + blockDim.x * blockIdx.x;
-    if(mid >= size)
-        return;
-    
-    for(int s = 1; s <= size; s *= 2) {
-          int spot = mid - s; 
-         
-          unsigned int val = 0;
-          if(spot >= 0)
-              val = d_bins[spot];
-          __syncthreads();
-          if(spot >= 0)
-              d_bins[mid] += val;
-          __syncthreads();
+    extern __shared__ unsigned int tmp[];
+    int mid = threadIdx.x;
+    tmp[mid] = d_bins[mid];
+    int basein = size, baseout = 0;
 
+    for(int s = 1; s <= size; s *= 2) {
+      basein = size - basein;
+      baseout = size - basein;
+      __syncthreads();    
+      tmp[baseout + mid] = tmp[basein + mid];
+      if(mid >= s)
+        tmp[baseout + mid] += tmp[basein + mid - s];
+    
     }
+    __syncthreads();   
+    d_bins[mid] = tmp[mid];
+
+}
+__global__ void  blelloch_no_padding(unsigned int* d_in_array, const size_t numBins)
+/*
+
+  \Params:
+    * d_in_array - input array of histogram values in each bin. Gets converted
+      to cdf by the end of the function.
+    * numBins - number of bins in the histogram (Must be < 2*MAX_THREADS_PER_BLOCK)
+*/
+{
+
+  int thid = threadIdx.x;
+
+  extern __shared__ float temp_array[];
+
+  temp_array[thid] = d_in_array[thid];
+  temp_array[thid + numBins/2] = d_in_array[thid + numBins/2];
+
+  __syncthreads();
+
+  // Part 1: Up Sweep, reduction
+  int stride = 1;
+  for (int d = numBins>>1; d > 0; d>>=1) {
+
+    if (thid < d) {
+      int neighbor = stride*(2*thid+1) - 1;
+      int index = stride*(2*thid+2) - 1;
+
+      temp_array[index] += temp_array[neighbor];
+    }
+    stride *=2;
+    __syncthreads();
+  }
+  // Now set last element to identity:
+  if (thid == 0)  temp_array[numBins-1] = 0;
+
+  // Part 2: Down sweep
+  for (int d=1; d<numBins; d *= 2) {
+    stride >>= 1;
+    __syncthreads();
+
+    if(thid < d) {
+      int neighbor = stride*(2*thid+1) - 1;
+      int index = stride*(2*thid+2) - 1;
+
+      float t = temp_array[neighbor];
+      temp_array[neighbor] = temp_array[index];
+      temp_array[index] += t;
+    }
+  }
+
+  __syncthreads();
+
+  d_in_array[thid] = temp_array[thid];
+  d_in_array[thid + numBins/2] = temp_array[thid + numBins/2];
+
+}
+__global__ void  blelloch_padding(unsigned int* d_in_array, const size_t numBins)
+/*
+  \Params:
+    * d_in_array - input array of histogram values in each bin. Gets converted
+      to cdf by the end of the function.
+    * numBins - number of bins in the histogram (Must be < 2*MAX_THREADS_PER_BLOCK)
+*/
+{
+
+  int thid = threadIdx.x;
+  int ai = thid;
+  int bi = thid + (int(numBins)/2);
+
+  int bankOffsetA = CONFLICT_FREE_OFFSET(ai);
+  int bankOffsetB = CONFLICT_FREE_OFFSET(bi);
+
+  extern __shared__ float temp_array[];
+
+  temp_array[ai + bankOffsetA] = d_in_array[ai];
+  temp_array[bi + bankOffsetB] = d_in_array[bi];
+
+  __syncthreads();
+
+  // Part 1: Up Sweep, reduction
+  int stride = 1;
+  for (int d = numBins>>1; d > 0; d>>=1) {
+
+    if (thid < d) {
+
+      int neighbor = stride*(2*thid+1) - 1;
+      int index = stride*(2*thid+2) - 1;
+      neighbor += int(CONFLICT_FREE_OFFSET(neighbor));
+      index += int(CONFLICT_FREE_OFFSET(index));
+
+      temp_array[index] += temp_array[neighbor];
+    }
+    stride *=2;
+    __syncthreads();
+  }
+  // Now set last element to identity:
+  if (thid == 0)  temp_array[int(numBins-1) + int(CONFLICT_FREE_OFFSET(numBins-1))] = 0;
+
+  // Part 2: Down sweep
+  for (int d=1; d<numBins; d *= 2) {
+    stride >>= 1;
+    __syncthreads();
+
+    if(thid < d) {
+      int neighbor = stride*(2*thid+1) - 1;
+      int index = stride*(2*thid+2) - 1;
+      neighbor += int(CONFLICT_FREE_OFFSET(neighbor));
+      index += int(CONFLICT_FREE_OFFSET(index));
+
+      float t = temp_array[neighbor];
+      temp_array[neighbor] = temp_array[index];
+      temp_array[index] += t;
+    }
+  }
+
+  __syncthreads();
+
+  d_in_array[ai] = temp_array[ai + bankOffsetA];
+  d_in_array[bi] = temp_array[bi + bankOffsetB];
+
 }
 
 // kernel for calculating minimum value
@@ -138,7 +268,7 @@ float get_min_max(const float* const d_in, const size_t size, int flag){
 }
 
 int get_max_size(int n, int d) {
-    return (int)ceil( (float)n/(float)d ) + 1;
+    return n%d == 0? n/d : n/d +1;
 }
 
 
@@ -183,21 +313,24 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
     generate_histogram<<<nblocks, tbp>>>(bins, d_logLuminance, numBins, min_logLum, max_logLum, size);
     cudaDeviceSynchronize();
 
-    unsigned int h_out[100];
-    cudaMemcpy(&h_out, bins, sizeof(unsigned int)*100, cudaMemcpyDeviceToHost);
-    for(int i = 0; i < 100; i++)
-        printf("hist out %d\n", h_out[i]);
+    // unsigned int h_out[100];
+    // cudaMemcpy(&h_out, bins, sizeof(unsigned int)*100, cudaMemcpyDeviceToHost);
+    // for(int i = 0; i < 100; i++)
+    //     printf("hist out %d\n", h_out[i]);
 
 //Histogram stored in bins
 
    dim3 scan_block_dim(get_max_size(numBins, thread_dim.x));
 
-   scan_kernel<<<scan_block_dim, thread_dim>>>(bins, numBins);
+   //scan_kernel<<<scan_block_dim, thread_dim, sizeof(unsigned int)* 1024 * 2>>>(bins, numBins);
+   //blelloch_no_padding<<<scan_block_dim,512,numBins*sizeof(int)>>>(bins, numBins);
+   blelloch_padding<<<scan_block_dim,512,(numBins+64)*sizeof(int)>>>(bins, numBins);
+
    cudaDeviceSynchronize(); 
     
-   cudaMemcpy(&h_out, bins, sizeof(unsigned int)*100, cudaMemcpyDeviceToHost);
-   for(int i = 0; i < 100; i++)
-       printf("cdf out %d\n", h_out[i]);
+   // cudaMemcpy(&h_out, bins, sizeof(unsigned int)*100, cudaMemcpyDeviceToHost);
+   // for(int i = 0; i < 100; i++)
+   //     printf("cdf out %d\n", h_out[i]);
     
    cudaMemcpy(d_cdf, bins, histogramSize, cudaMemcpyDeviceToDevice);
 
