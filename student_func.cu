@@ -56,7 +56,8 @@ __global__ void  blelloch_scan_single_block(unsigned int* d_in_array, const size
 {
 
   int thid = threadIdx.x;
-
+  int global_id = blockIdx.x*blockDim.x + thid;
+  int last = d_in_array[1023];
   extern __shared__ float temp_array[];
 
   // Make sure that we do not read from undefined part of array if it
@@ -276,11 +277,10 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
 //Histogram stored in bins
 
    dim3 scan_block_dim(get_max_size(numBins, thread_dim.x));
-   printf("scan_block_dim is %d",get_max_size(numBins, thread_dim.x));
 
-   scan_kernel<<<scan_block_dim, thread_dim, sizeof(unsigned int)* 1024 * 2>>>(bins, numBins);
+   //scan_kernel<<<scan_block_dim, thread_dim, sizeof(unsigned int)* 1024 * 2>>>(bins, numBins);
    //nblocks = (numBins/2 - 1) / 512 + 1;
-   //blelloch_scan_single_block<<<scan_block_dim,512,numBins*sizeof(int)>>>(bins, numBins);
+   blelloch_scan_single_block<<<scan_block_dim,512,numBins*sizeof(int)>>>(bins, numBins);
 
 
    cudaDeviceSynchronize(); 
