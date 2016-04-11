@@ -21,22 +21,21 @@ __global__ void generate_histogram(unsigned int* bins, const float* dIn, const i
 //Scan Kernel
 __global__ 
 void scan_kernel(unsigned int* d_bins, int size) {
-    int mid = threadIdx.x + blockDim.x * blockIdx.x;
-    if(mid >= size)
-        return;
-    
-    for(int s = 1; s <= size; s *= 2) {
-          int spot = mid - s; 
-         
-          unsigned int val = 0;
-          if(spot >= 0)
-              val = d_bins[spot];
-          __syncthreads();
-          if(spot >= 0)
-              d_bins[mid] += val;
-          __syncthreads();
+    extern __shared__ unsigned int tmp[];
+    int mid = threadIdx.x;
+    tmp[mid] = d_bins[mid];
+    int basein = size, baseout = 0;
 
+    for(int s = 1; s <= size; s *= 2) {
+      basein = size - basein;
+      baseout = size - basein;
+      __syncthreads();    
+      tmp[baseout + mid] = tmp[basein + mid];
+      if(mid >= s)
+        tmp[baseout + mid] += tmp[basein + mid - s];
     }
+    __syncthreads();   
+    d_bins[mid] = tmp[mid];
 }
 __global__ void  blelloch_scan_single_block(unsigned int* d_in_array, const size_t numBins)
 /*
@@ -55,9 +54,7 @@ __global__ void  blelloch_scan_single_block(unsigned int* d_in_array, const size
 {
 
   int thid = threadIdx.x;
-  int global_id = blockIdx.x*blockDim.x + thid;
-  // In this function, above two expressions should be equal, so let's
-  // not use global_id!!
+
 
   extern __shared__ float temp_array[];
 
@@ -216,7 +213,7 @@ float get_min_max(const float* const d_in, const size_t size, int flag){
 }
 
 int get_max_size(int n, int d) {
-    return (int)ceil( (float)n/(float)d ) + 1;
+    return n%d == 0? n/d : n/d +1;
 }
 
 
@@ -263,22 +260,23 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
 
     unsigned int h_out[100];
     cudaMemcpy(&h_out, bins, sizeof(unsigned int)*100, cudaMemcpyDeviceToHost);
-    for(int i = 0; i < 100; i++)
-        printf("hist out %d\n", h_out[i]);
+    //for(int i = 0; i < 100; i++)
+        //printf("hist out %d\n", h_out[i]);
 
 //Histogram stored in bins
 
    dim3 scan_block_dim(get_max_size(numBins, thread_dim.x));
+   printf("scan_block_dim is %d",get_max_size(numBins, thread_dim.x));
 
-   scan_kernel<<<scan_block_dim, thread_dim>>>(bins, numBins);
+   scan_kernel<<<scan_block_dim, thread_dim, sizeof(unsigned int)* 1024 * 2>>>(bins, numBins);
    //nblocks = (numBins/2 - 1) / 512 + 1;
    //blelloch_scan_single_block<<<scan_block_dim,512,numBins*sizeof(int)>>>(bins, numBins);
 
    cudaDeviceSynchronize(); 
     
    cudaMemcpy(&h_out, bins, sizeof(unsigned int)*100, cudaMemcpyDeviceToHost);
-   for(int i = 0; i < 100; i++)
-       printf("cdf out %d\n", h_out[i]);
+   //for(int i = 0; i < 100; i++)
+       //printf("cdf out %d\n", h_out[i]);
     
    cudaMemcpy(d_cdf, bins, histogramSize, cudaMemcpyDeviceToDevice);
 
