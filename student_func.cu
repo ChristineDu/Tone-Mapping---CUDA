@@ -1,5 +1,8 @@
 #include "utils.h"
 #include "stdio.h"
+#include <thrust/sort.h>
+#include <thrust/functional.h>
+#include <thrust/device_ptr.h>
 
 #define tbp 1024
 #define NUM_BANKS 16
@@ -49,6 +52,47 @@ __global__ void generate_histogram(unsigned int* bins, const float* dIn, const i
 
   atomicAdd(&bins[tid],temp[tid]);
  
+}
+
+__global__ void generate_binID(const float* dIn, int* out, const int binNumber, const float lumMin, const float lumMax, const int size) {
+  unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i>size)
+  {
+    return;
+  }
+
+  float range = lumMax - lumMin;
+  int bin = ((dIn[i] - lumMin) / range) * binNumber;
+
+  out[i] = bin; 
+}
+
+__global__ void update_bins(unsigned int* bins, int* in_binID, int binNumber, const int size){
+   unsigned int tid = threadIdx.x;
+   unsigned int i = blockIdx.x;
+   int nt = blockDim.x * blockDim.y;  
+
+   __shared__ unsigned int temp[1024];
+   temp[tid] = 0;
+   __syncthreads();
+
+  for(int x=tid; x<size; x+=nt){
+  if(in_binID[x] == i){;
+    temp[tid]++;
+  }
+  if(in_binID[x] > i){
+    break;
+  }
+  } 
+  __syncthreads();
+
+  if(tid == 0){
+    for(int x = 0; x<binNumber;x++){
+    bins[i] += temp[x];
+  }
+}
+
+
 }
 
 //Scan Kernel
