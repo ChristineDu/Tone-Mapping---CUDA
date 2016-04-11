@@ -20,7 +20,7 @@ void postProcess(const std::string& output_file, size_t numRows, size_t numCols,
 
 void cleanupGlobalMemory(void);
 
-// Function from student_func.cu
+// Function from kernel_func.cu
 void your_histogram_and_prefixsum(const float* const d_luminance,
                                   unsigned int* const d_cdf,
                                   float &min_logLum,
