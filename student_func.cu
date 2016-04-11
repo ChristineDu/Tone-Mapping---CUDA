@@ -33,9 +33,11 @@ void scan_kernel(unsigned int* d_bins, int size) {
       tmp[baseout + mid] = tmp[basein + mid];
       if(mid >= s)
         tmp[baseout + mid] += tmp[basein + mid - s];
+    
     }
     __syncthreads();   
     d_bins[mid] = tmp[mid];
+
 }
 __global__ void  blelloch_scan_single_block(unsigned int* d_in_array, const size_t numBins)
 /*
@@ -55,13 +57,13 @@ __global__ void  blelloch_scan_single_block(unsigned int* d_in_array, const size
 
   int thid = threadIdx.x;
 
-
   extern __shared__ float temp_array[];
 
   // Make sure that we do not read from undefined part of array if it
   // is smaller than the number of threads that we gave defined. If
   // that is the case, the final values of the input array are
   // extended to zero.
+
   if (thid < numBins) temp_array[thid] = d_in_array[thid];
   else temp_array[thid] = 0;
   if( (thid + numBins/2) < numBins)
@@ -111,6 +113,14 @@ __global__ void  blelloch_scan_single_block(unsigned int* d_in_array, const size
   if (thid < numBins) d_in_array[thid] = temp_array[thid];
   if ((thid + numBins/2) < numBins)
     d_in_array[thid + numBins/2] = temp_array[thid + numBins/2];
+
+  __syncthreads();
+ if(global_id == 0){
+	for (int i = 0; i != numBins - 1; i++) {
+  	 	*(d_in_array + i) = *(d_in_array + i + 1);
+	}
+	d_in_array[numBins - 1] += last;
+ }
 
 }
 
@@ -271,6 +281,7 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
    scan_kernel<<<scan_block_dim, thread_dim, sizeof(unsigned int)* 1024 * 2>>>(bins, numBins);
    //nblocks = (numBins/2 - 1) / 512 + 1;
    //blelloch_scan_single_block<<<scan_block_dim,512,numBins*sizeof(int)>>>(bins, numBins);
+
 
    cudaDeviceSynchronize(); 
     
