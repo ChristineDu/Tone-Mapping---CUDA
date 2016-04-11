@@ -13,7 +13,6 @@
 
 //kernel for generating histogram
 __global__ void generate_histogram(unsigned int* bins, const float* dIn, const int binNumber, const float lumMin, const float lumMax, const int size) {
-  extern __shared__ float sdata[];
 
   unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -24,6 +23,32 @@ __global__ void generate_histogram(unsigned int* bins, const float* dIn, const i
   int bin = ((dIn[i] - lumMin) / range) * binNumber;
 
   atomicAdd(&bins[bin], 1);
+}
+
+ __global__ void generate_histogram_smem(unsigned int* bins, const float* dIn, const int binNumber, const float lumMin, const float lumMax, const int size) {
+ 
+  __shared__ unsigned int temp[1024];
+  
+  unsigned int tid = threadIdx.x;
+  unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+  int nt = blockDim.x * blockDim.y;
+
+  if (i > size)
+    return;
+
+  if(tid < binNumber)
+    temp[tid] = 0;
+  __syncthreads();
+
+  float range = lumMax - lumMin;
+  unsigned int bin = ((dIn[i] - lumMin) / range) * binNumber;
+  if(bin<1024)
+  	atomicAdd(&temp[bin], 1);
+  __syncthreads();
+
+  atomicAdd(&bins[tid],temp[tid]);
+ 
 }
 
 //Scan Kernel
@@ -310,7 +335,7 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
 
     dim3 thread_dim(1024);
     dim3 hist_block_dim(get_max_size(size, thread_dim.x));
-    generate_histogram<<<nblocks, tbp>>>(bins, d_logLuminance, numBins, min_logLum, max_logLum, size);
+    generate_histogram_smem<<<nblocks, tbp>>>(bins, d_logLuminance, numBins, min_logLum, max_logLum, size);
     cudaDeviceSynchronize();
 
     // unsigned int h_out[100];
@@ -331,6 +356,7 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
    // cudaMemcpy(&h_out, bins, sizeof(unsigned int)*100, cudaMemcpyDeviceToHost);
    // for(int i = 0; i < 100; i++)
    //     printf("cdf out %d\n", h_out[i]);
+
     
    cudaMemcpy(d_cdf, bins, histogramSize, cudaMemcpyDeviceToDevice);
 
