@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
 
   timer.Stop();
   cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
-  int err = printf("Your code ran in: %f msecs. ", timer.Elapsed());
+  int err = printf("Your code ran in: %f msecs. \n", timer.Elapsed());
   float GPURuntime = timer.Elapsed();
 
   if (err < 0) {
@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
   referenceCalculation(h_luminance, h_cdf, numRows, numCols, numBins, min_logLum, max_logLum);
   timer.Stop();
   float CPURuntime = timer.Elapsed();
-  printf("CPU ran in: %f msecs. ", timer.Elapsed());
+  printf("CPU ran in: %f msecs. \n", timer.Elapsed());
   float speedUp = CPURuntime / GPURuntime;
   printf("GPU Speedup: %f.\n", speedUp);
 
