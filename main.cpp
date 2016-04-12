@@ -20,7 +20,7 @@ void postProcess(const std::string& output_file, size_t numRows, size_t numCols,
 
 void cleanupGlobalMemory(void);
 
-// Function from kernel_func.cu
+// Function from student_func.cu
 void your_histogram_and_prefixsum(const float* const d_luminance,
                                   unsigned int* const d_cdf,
                                   float &min_logLum,
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
 
   timer.Stop();
   cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
-  int err = printf("Your code ran in: %f msecs.\n", timer.Elapsed());
+  int err = printf("Your code ran in: %f msecs. ", timer.Elapsed());
 
   if (err < 0) {
     //Couldn't print! Probably the student closed stdout - bad news
@@ -112,7 +112,13 @@ int main(int argc, char **argv) {
     max_logLum = std::max(h_luminance[i], max_logLum);
   }
 
+  timer.Start();
   referenceCalculation(h_luminance, h_cdf, numRows, numCols, numBins, min_logLum, max_logLum);
+  timer.Stop();
+  float CPURuntime = timer.Elapsed();
+  printf("CPU ran in: %f msecs. ", timer.Elapsed());
+  float speedUp = CPURuntime / GPURuntime;
+  printf("GPU Speedup: %f.\n", speedUp);
 
   checkCudaErrors(cudaMemcpy(d_cdf, h_cdf, sizeof(unsigned int) * numBins, cudaMemcpyHostToDevice));
 
