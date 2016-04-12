@@ -138,9 +138,7 @@ void preProcess(float** d_luminance, unsigned int** d_cdf,
                 unsigned int *numberOfBins,
                 const std::string &filename) {
   //make sure the context initializes ok
-printf("123333");
   checkCudaErrors(cudaFree(0));
-printf("123333");
   float *imgPtr; //we will become responsible for this pointer
   loadImageHDR(filename, &imgPtr, &numRows__, &numCols__);
   *numRows = numRows__;

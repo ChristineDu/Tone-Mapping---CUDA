@@ -92,6 +92,7 @@ int main(int argc, char **argv) {
   timer.Stop();
   cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
   int err = printf("Your code ran in: %f msecs. ", timer.Elapsed());
+  float GPURuntime = timer.Elapsed();
 
   if (err < 0) {
     //Couldn't print! Probably the student closed stdout - bad news

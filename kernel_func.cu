@@ -368,7 +368,7 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
     printf("got max of %f\n", max_logLum);
     printf("numBins %lu\n", numBins);
 
-//Generate Histogram
+
     unsigned int* bins;
     size_t histogramSize = sizeof(unsigned int)*numBins;
 
@@ -376,16 +376,26 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
     cudaMemset(bins, 0, histogramSize);
 
     int nblocks = ((size + tbp) - 1) / tbp;
-
     dim3 thread_dim(1024);
-    dim3 hist_block_dim(get_max_size(size, thread_dim.x));
+//Generate Histogram
+    
     generate_histogram_smem<<<nblocks, tbp>>>(bins, d_logLuminance, numBins, min_logLum, max_logLum, size);
     cudaDeviceSynchronize();
 
-    // unsigned int h_out[100];
-    // cudaMemcpy(&h_out, bins, sizeof(unsigned int)*100, cudaMemcpyDeviceToHost);
-    // for(int i = 0; i < 100; i++)
-    //     printf("hist out %d\n", h_out[i]);
+//Sort And Search Generate Histogram
+/*    int* bin_ID;
+    cudaMalloc(&bin_ID, sizeof(int)*size);
+    generate_binID<<<nblocks, tbp>>>(d_logLuminance, bin_ID, numBins, min_logLum, max_logLum, size);
+    cudaDeviceSynchronize();
+    thrust::device_ptr<int> id(bin_ID);
+    thrust::sort(id, id + size);
+    update_bins<<<1024,1024>>>(bins, bin_ID, numBins, size);
+    cudaDeviceSynchronize();
+*/
+ //    int h_out[100];
+ //    cudaMemcpy(&h_out, bins, sizeof(unsigned int)*100, cudaMemcpyDeviceToHost);
+ //    for(int i = 0; i < 100; i++)
+ //        printf("hist out %d\n", h_out[i]);
 
 //Histogram stored in bins
 
@@ -397,9 +407,9 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
 
    cudaDeviceSynchronize(); 
     
-   // cudaMemcpy(&h_out, bins, sizeof(unsigned int)*100, cudaMemcpyDeviceToHost);
-   // for(int i = 0; i < 100; i++)
-   //     printf("cdf out %d\n", h_out[i]);
+  //  cudaMemcpy(&h_out, bins, sizeof(unsigned int)*100, cudaMemcpyDeviceToHost);
+  //  for(int i = 0; i < 100; i++)
+  //      printf("cdf out %d\n", h_out[i]);
 
     
    cudaMemcpy(d_cdf, bins, histogramSize, cudaMemcpyDeviceToDevice);
